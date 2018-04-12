@@ -127,6 +127,26 @@ class UnaryNode(Node):
     def __init__(self, operand):
         self.operand = operand
 
+class FuncNode(Node):
+
+    def __init__(self):
+        self.fname = ''
+        self.params = []
+        self.localvars = []
+        self.body = None
+
+class CompoundStmtNode(Node):
+
+    def __init__(self):
+        self.stmts = []
+
+class IfStmtNode(Node):
+
+    def __init__(self):
+        self.cond = None
+        self.then = None
+        self.els = None
+
 class NodeFactory(object):
     '''
     produce abstract syntax tree node
@@ -185,4 +205,31 @@ class NodeFactory(object):
         self._base_set(n)
         n.kind = NodeKind.AST_CONV
         n.ty = toty
+        return n
+
+    def func_node(self, ty, params, body, localvars):
+        n = FuncNode()
+        self._base_set(n)
+        n.kind = NodeKind.AST_FUNC
+        n.ty = ty
+        n.fname = ty.varname
+        n.params = params
+        n.body = body
+        n.localvars = localvars
+        return n
+
+    def compound_stmt_node(self, stmts):
+        n = CompoundStmtNode()
+        self._base_set(n)
+        n.kind = NodeKind.AST_COMPOUND_STMT
+        n.stmts = stmts
+        return n
+
+    def if_stmt_node(self, cond, then, els):
+        n = IfStmtNode()
+        self._base_set(n)
+        n.kind = NodeKind.AST_IF
+        n.cond = cond
+        n.then = then
+        n.els = els
         return n

@@ -34,8 +34,9 @@ def see_node(p_name, node, dot):
         dot.node(name, str(node.kind))
         dot.edge(p_name, name)
         see_node(name, node.declvar, dot)
-        for n in node.declinit:
-            see_node(name, n, dot)
+        if not node.declinit is None:
+            for n in node.declinit:
+                see_node(name, n, dot)
     elif type(node) == InitNode:
         dot.node(name, str(node.kind))
         dot.edge(p_name, name)
@@ -49,6 +50,26 @@ def see_node(p_name, node, dot):
         dot.node(name, str(node.kind))
         dot.edge(p_name, name)
         see_node(name, node.operand, dot)
+    elif type(node) == FuncNode:
+        dot.node(name, str(node.kind) + '( func:' + node.fname + ' )')
+        dot.edge(p_name, name)
+        for n in node.params:
+            see_node(name, n, dot)
+        see_node(name, node.body, dot)
+        for n in node.localvars:
+            see_node(name, n, dot)
+    elif type(node) == CompoundStmtNode:
+        dot.node(name, str(node.kind))
+        dot.edge(p_name, name)
+        for n in node.stmts:
+            see_node(name, n, dot)
+    elif type(node) == IfStmtNode:
+        dot.node(name, str(node.kind))
+        dot.edge(p_name, name)
+        see_node(name, node.cond, dot)
+        see_node(name, node.then, dot)
+        if not node.els is None:
+            see_node(name, node.els, dot)
 
 if __name__ == '__main__':
     path = './t1.c'

@@ -44,6 +44,8 @@ class Parser(object):
         self._current_token = None
         self._sourceloc = None
 
+        self._localvars = None # store the local variant
+
         self._tm = TypeMaker() #make type
         self._sm = SymbolManager() #Symbol Manager
         self._nf = NodeFactory(self._sm)
@@ -133,7 +135,9 @@ class Parser(object):
                 continue
             if c_t.kind == TokenKind.TIDENT:
                 continue
-            r = self._peek().value == '{'
+            if c_t.value == '{':
+                r = True
+                break
 
         self._rollback()
         return r
@@ -145,7 +149,7 @@ class Parser(object):
                 self._error('premature end of input')
             if c_t.value == ')':
                 break
-            if c_t.value == ')':
+            if c_t.value == '(':
                 self._skip_parenteses()
 
     def _skip_type_qualifiers(self):
@@ -192,6 +196,12 @@ class Parser(object):
     def _binop(self, kind, lnode, rnode):
         #TODO many thing
         return self._nf.binary_node(kind, self._tm.type_int(), lnode, rnode)
+
+    def _var_node(self, ty, isglobal):
+        n = self._nf.var_node(ty, isglobal)
+        if not isglobal and not self._localvars is None:
+            self._localvars.append(n)
+        return n
 
     def _read_decl_spec(self):
         '''
@@ -359,10 +369,10 @@ class Parser(object):
         '''
         c_t = self._advance()
         if c_t.value == 'K_VOID' and self._next_t(')'):
-            return self._tm.make_func_type(basety, [], False)
+            return self._tm.make_func_type(ret_type, [], False)
 
         if c_t.value == ')':
-            return self._tm.make_func_type(basety, [], False)
+            return self._tm.make_func_type(ret_type, [], False)
 
         self._back()
         p_t = self._peek()
@@ -390,7 +400,7 @@ class Parser(object):
             self._ensure_not_void(ty)
             params_type.append(ty)
             if not is_typeonly:
-                param_vars.append(self._nf.var_node(ty, False))
+                param_vars.append(self._var_node(ty, False))
             c_t = self._advance()
             if c_t.value == ')':
                 return False
@@ -416,7 +426,91 @@ class Parser(object):
         return ty
 
     def _read_func_body(self, functype, params):
-        pass
+        '''
+        read function body
+        '''
+        #TODO
+        self._localvars = []
+        body = self._read_compound_stmt()
+        node = self._nf.func_node(functype, params, body, self._localvars)
+        self._localvars = None
+        return node
+
+    def _read_compound_stmt(self):
+        '''
+        compound statement
+        '''
+        self._sm.enter_scope()
+        stmts = []
+        while True:
+            if self._next_t('}'):
+                break
+            self._read_decl_or_stmt(stmts)
+        node = self._nf.compound_stmt_node(stmts)
+        self._sm.exit_scope()
+        return node
+
+    def _read_decl_or_stmt(self, stmts):
+        #TODO assert keyword
+        p_t = self._peek()
+        if p_t.kind == TokenKind.TEOF:
+            self._error('premature end of input')
+        if self._is_type(p_t):
+            self._read_decl(stmts, False)
+        else:
+            stmt = self._read_stmt()
+            stmts.append(stmt)
+
+    def _read_stmt(self):
+        '''
+        statement
+        '''
+        #TODO
+        c_t = self._advance()
+
+        if c_t.value == '{':
+            return self._read_compound_stmt()
+
+        if c_t.kind == TokenKind.TKEYWORD:
+            if c_t.value == 'K_IF':
+                return self._read_if_stmt()
+            elif c_t.value == 'K_FOR':
+                pass
+            elif c_t.value == 'K_WHILE':
+                pass
+            elif c_t.value == 'K_DO':
+                pass
+            elif c_t.value == 'K_RETURN':
+                pass
+            elif c_t.value == 'K_SWITCH':
+                pass
+            elif c_t.value == 'K_CASE':
+                pass
+            elif c_t.value == 'K_DEFAULT':
+                pass
+            elif c_t.value == 'K_BREAK':
+                pass
+            elif c_t.value == 'K_CONTINUE':
+                pass
+            elif c_t.value == 'K_GOTO':
+                pass
+
+        if c_t.kind == TokenKind.TIDENT and self._next_t(':'):
+            #TODO read label
+            pass
+
+    def _read_if_stmt(self):
+        '''
+        if statement
+        '''
+        self._expect('(')
+        cond = self._read_boolean_expr()
+        self._expect(')')
+        then = self._read_stmt()
+        if not self._next_t('K_ELSE'):
+            return self._nf.if_stmt_node(cond, then, None)
+        els = self._read_stmt()
+        return self._nf.if_stmt_node(cond, then, els)
 
     def _read_abstract_declarator(self, basety):
         '''
@@ -435,6 +529,24 @@ class Parser(object):
             #TODO some judgement
             r.append(self._nf.init_node(node, ty))
         return r
+
+    def _read_expr(self):
+        '''
+        expression
+        '''
+        return self._read_comma_expr()
+
+    def _read_comma_expr(self):
+        #TODO deal the ,
+        node = self._read_assignment_expr()
+        while self._next_t(','):
+            pass
+        return node
+
+    def _read_boolean_expr(self):
+        cond = self._read_expr()
+        ty = cond.ty
+        return self._nf.conv_node(self._tm.type_bool, cond) if ty.is_floattype() else cond
 
     def _read_assignment_expr(self):
         '''
@@ -696,7 +808,7 @@ class Parser(object):
         #TODO int uint long ulong
         return self._nf.val_node(self._tm.type_int(), int(tok.value))
 
-    def _read_decl(self, isglobal=True):
+    def _read_decl(self, block, isglobal=True):
         '''
         declaration
         '''
@@ -709,13 +821,13 @@ class Parser(object):
             #TODO sclass,typedef
 
             self._ensure_not_void(ty)
-            node = self._nf.var_node(ty, True)
+            node = self._var_node(ty, isglobal)
             if self._next_t('='):
                 # decl init
-                self.ast.append(self._nf.decl_node(node, self._read_decl_init(ty)))
+                block.append(self._nf.decl_node(node, self._read_decl_init(ty)))
             elif ty.kind != TypeKind.FUNC:
                 # decl not init
-                self.ast.append(self._nf.decl_node(node, None))
+                block.append(self._nf.decl_node(node, None))
 
             if self._next_t(';'):
                 return
@@ -733,7 +845,7 @@ class Parser(object):
         self._expect('{')
         node = self._read_func_body(functype, params)
         self._sm.exit_scope()
-        self._nf.var_node()
+
         return node
 
     def parse(self):
@@ -741,7 +853,8 @@ class Parser(object):
             if self._peek() is None or self._peek().kind == TokenKind.TEOF:
                 break;
             if self._is_funcdef():
-                #TODO read function definition
+                #read function definition
+                self.ast.append(self._read_funcdef())
                 pass
             else:
-                self._read_decl()
+                self._read_decl(self.ast)

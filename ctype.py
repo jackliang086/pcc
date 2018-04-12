@@ -226,6 +226,7 @@ class TypeMaker(Singleton):
     def make_func_type(self, ret_type, params_type, hasva):
         t = Type()
         t.kind = TypeKind.FUNC
+        t.varname = ret_type.varname
         t.ret_type = ret_type
         t.params = params_type
         t.hasva = hasva

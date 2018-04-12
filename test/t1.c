@@ -11,8 +11,12 @@ static void expects(short a, short b) {
   comment*
 **/
 int a = 2|3*6;
-/*
+
 int main(){
-  //expects(4, 5);
-  return 1;
-  }*/
+  int b = 6/2;
+  if (1){
+    int c = 7;
+  }else{
+    int d = 111;
+  }
+}
